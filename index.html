@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>連銀総裁クイズ</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1d2330; --muted: #6b7280;
+    --line: #e5e7eb; --accent: #1f4e8c; --ok: #15803d; --ng: #b91c1c;
+    --hawk: #b45309; --dove: #2563eb; --neutral: #6b7280;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#12151b; --card:#1b1f27; --text:#e6e8ec; --muted:#9aa3b2; --line:#2b313c;
+            --accent:#7aa7e6; --ok:#4ade80; --ng:#f87171; --hawk:#f59e0b; --dove:#60a5fa; --neutral:#9ca3af; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.35rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: .85rem; margin: 0 0 20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px; }
+  .progress { display:flex; justify-content:space-between; color:var(--muted); font-size:.85rem; margin-bottom:12px; }
+  .district { color: var(--muted); font-size: .85rem; }
+  .bank { font-size: 1.6rem; font-weight: 700; margin: 4px 0 2px; }
+  .bank-en { color: var(--muted); font-size: .9rem; margin-bottom: 18px; }
+  input[type=text] { width:100%; font-size:1.1rem; padding:12px; border-radius:10px;
+         border:1px solid var(--line); background:var(--bg); color:var(--text); }
+  .row { display:flex; gap:8px; margin-top:10px; }
+  button { font-size:1rem; padding:11px 14px; border-radius:10px; border:1px solid var(--line);
+           background:var(--card); color:var(--text); cursor:pointer; flex:1; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .result { margin-top:16px; padding-top:16px; border-top:1px solid var(--line); display:none; }
+  .verdict { font-weight:700; margin-bottom:8px; }
+  .verdict.ok { color:var(--ok); } .verdict.ng { color:var(--ng); }
+  .answer { font-size:1.25rem; font-weight:700; }
+  .answer-en { color:var(--muted); font-size:.9rem; }
+  .badge { display:inline-block; margin-top:8px; padding:3px 10px; border-radius:999px;
+           font-size:.85rem; font-weight:700; border:1.5px solid currentColor; }
+  .badge.hawk { color:var(--hawk); } .badge.dove { color:var(--dove); } .badge.neutral { color:var(--neutral); }
+  .note { color:var(--muted); font-size:.85rem; margin-top:6px; }
+  .opts { display:flex; gap:12px; flex-wrap:wrap; margin-top:16px; font-size:.85rem; color:var(--muted); }
+  .opts label { display:flex; gap:6px; align-items:center; }
+  table { width:100%; border-collapse:collapse; font-size:.9rem; margin-top:12px; }
+  td, th { text-align:left; padding:6px 4px; border-bottom:1px solid var(--line); }
+  .foot { color:var(--muted); font-size:.75rem; margin-top:20px; line-height:1.6; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>連銀総裁クイズ</h1>
+  <p class="sub">連銀名を見て、総裁の名前を答えてください(姓だけでOK・カタカナ/英語どちらでも)</p>
+
+  <div class="card" id="quiz">
+    <div class="progress"><span id="prog"></span><span id="score"></span></div>
+    <div class="district" id="district"></div>
+    <div class="bank" id="bank"></div>
+    <div class="bank-en" id="bankEn"></div>
+
+    <form id="form" autocomplete="off">
+      <input type="text" id="input" placeholder="例:ローガン / Logan">
+      <div class="row">
+        <button type="submit" class="primary" id="submitBtn">答える</button>
+        <button type="button" id="skipBtn">わからない</button>
+      </div>
+    </form>
+
+    <div class="result" id="result">
+      <div class="verdict" id="verdict"></div>
+      <div class="answer" id="answer"></div>
+      <div class="answer-en" id="answerEn"></div>
+      <span class="badge" id="badge"></span>
+      <div class="note" id="note"></div>
+      <div class="row"><button class="primary" id="nextBtn">次へ</button></div>
+    </div>
+  </div>
+
+  <div class="card hidden" id="done">
+    <div class="bank" id="final"></div>
+    <div class="note" id="finalNote"></div>
+    <table id="missTable"></table>
+    <div class="row">
+      <button class="primary" id="retryMissBtn">間違えた問題だけ</button>
+      <button id="restartBtn">最初から</button>
+    </div>
+  </div>
+
+  <div class="opts">
+    <label><input type="checkbox" id="optShuffle" checked> 出題順をシャッフル</label>
+  </div>
+
+  <p class="foot">
+    総裁の顔ぶれは2026年11月時点。アトランタ連銀は総裁が決まっておらず、暫定総裁が務めています。<br>
+    タカ派・ハト派・中立の分類は、2026年の発言や投票行動の報道をもとにした大まかな目安です。発言によって変わるので、参考程度に見てください。
+  </p>
+</main>
+
+<script>
+const DATA = [
+  { d: 1,  bank: "ボストン連銀",       bankEn: "Federal Reserve Bank of Boston",
+    ja: "スーザン・コリンズ",   en: "Susan M. Collins",   stance: "neutral",
+    alias: ["コリンズ", "collins"] },
+  { d: 2,  bank: "ニューヨーク連銀",   bankEn: "Federal Reserve Bank of New York",
+    ja: "ジョン・ウィリアムズ", en: "John C. Williams",   stance: "neutral",
+    alias: ["ウィリアムズ", "ウイリアムズ", "ウィリアムス", "williams"],
+    note: "FOMCの常任投票メンバー(副議長)" },
+  { d: 3,  bank: "フィラデルフィア連銀", bankEn: "Federal Reserve Bank of Philadelphia",
+    ja: "アンナ・ポールソン",   en: "Anna Paulson",       stance: "dove",
+    alias: ["ポールソン", "paulson"] },
+  { d: 4,  bank: "クリーブランド連銀", bankEn: "Federal Reserve Bank of Cleveland",
+    ja: "ベス・ハマック",       en: "Beth M. Hammack",    stance: "hawk",
+    alias: ["ハマック", "hammack"] },
+  { d: 5,  bank: "リッチモンド連銀",   bankEn: "Federal Reserve Bank of Richmond",
+    ja: "トーマス・バーキン",   en: "Thomas I. Barkin",   stance: "neutral",
+    alias: ["バーキン", "barkin"] },
+  { d: 6,  bank: "アトランタ連銀",     bankEn: "Federal Reserve Bank of Atlanta",
+    ja: "シェリル・ベナブル",   en: "Cheryl L. Venable",  stance: "neutral",
+    alias: ["ベナブル", "ヴェナブル", "ベネイブル", "venable"],
+    note: "暫定総裁(2026年3月〜)。前任のボスティックが2月に退任し、後任を選考中" },
+  { d: 7,  bank: "シカゴ連銀",         bankEn: "Federal Reserve Bank of Chicago",
+    ja: "オースタン・グールズビー", en: "Austan D. Goolsbee", stance: "dove",
+    alias: ["グールズビー", "グールスビー", "goolsbee"] },
+  { d: 8,  bank: "セントルイス連銀",   bankEn: "Federal Reserve Bank of St. Louis",
+    ja: "アルベルト・ムサレム", en: "Alberto G. Musalem", stance: "hawk",
+    alias: ["ムサレム", "musalem"] },
+  { d: 9,  bank: "ミネアポリス連銀",   bankEn: "Federal Reserve Bank of Minneapolis",
+    ja: "ニール・カシュカリ",   en: "Neel T. Kashkari",   stance: "hawk",
+    alias: ["カシュカリ", "kashkari"] },
+  { d: 10, bank: "カンザスシティ連銀", bankEn: "Federal Reserve Bank of Kansas City",
+    ja: "ジェフリー・シュミッド", en: "Jeffrey R. Schmid", stance: "hawk",
+    alias: ["シュミッド", "シュミット", "schmid"] },
+  { d: 11, bank: "ダラス連銀",         bankEn: "Federal Reserve Bank of Dallas",
+    ja: "ローリー・ローガン",   en: "Lorie K. Logan",     stance: "hawk",
+    alias: ["ローガン", "logan"] },
+  { d: 12, bank: "サンフランシスコ連銀", bankEn: "Federal Reserve Bank of San Francisco",
+    ja: "メアリー・デイリー",   en: "Mary C. Daly",       stance: "neutral",
+    alias: ["デイリー", "デーリー", "daly"] },
+];
+
+const STANCE = {
+  hawk:    { label: "タカ派", cls: "hawk" },
+  dove:    { label: "ハト派", cls: "dove" },
+  neutral: { label: "中立",   cls: "neutral" },
+};
+
+// 表記ゆれを吸収:全角→半角、小文字化、空白・中黒・ピリオド除去、ひらがな→カタカナ、ヴ→ブ
+function norm(s) {
+  return s.normalize("NFKC").toLowerCase()
+    .replace(/[\s・.\-‐]/g, "")
+    .replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60))
+    .replace(/ヴ/g, "ブ");
+}
+function isCorrect(input, q) {
+  const v = norm(input);
+  if (!v) return false;
+  const keys = [...q.alias, q.ja, q.en].map(norm);
+  // 姓だけ・フルネーム・名+姓どれでも正解にする
+  return keys.some(k => v === k || (v.length >= 3 && v.includes(k)));
+}
+
+const $ = id => document.getElementById(id);
+let order = [], idx = 0, correct = 0, misses = [], answered = false;
+
+function start(list) {
+  order = $("optShuffle").checked ? [...list].sort(() => Math.random() - 0.5) : [...list];
+  idx = 0; correct = 0; misses = [];
+  $("quiz").classList.remove("hidden");
+  $("done").classList.add("hidden");
+  show();
+}
+
+function show() {
+  const q = order[idx];
+  answered = false;
+  $("prog").textContent = `${idx + 1} / ${order.length}`;
+  $("score").textContent = `正解 ${correct}`;
+  $("district").textContent = `第${q.d}地区`;
+  $("bank").textContent = q.bank;
+  $("bankEn").textContent = q.bankEn;
+  $("input").value = "";
+  $("input").disabled = false;
+  $("submitBtn").disabled = false;
+  $("skipBtn").disabled = false;
+  $("result").style.display = "none";
+  $("input").focus();
+}
+
+function reveal(ok) {
+  const q = order[idx];
+  answered = true;
+  if (ok) correct++; else misses.push(q);
+  $("score").textContent = `正解 ${correct}`;
+  $("verdict").textContent = ok ? "正解!" : "不正解";
+  $("verdict").className = "verdict " + (ok ? "ok" : "ng");
+  $("answer").textContent = q.ja;
+  $("answerEn").textContent = q.en;
+  const s = STANCE[q.stance];
+  $("badge").textContent = s.label;
+  $("badge").className = "badge " + s.cls;
+  $("note").textContent = q.note || "";
+  $("input").disabled = true;
+  $("submitBtn").disabled = true;
+  $("skipBtn").disabled = true;
+  $("result").style.display = "block";
+  $("nextBtn").focus();
+}
+
+function next() {
+  idx++;
+  if (idx < order.length) { show(); return; }
+  $("quiz").classList.add("hidden");
+  $("done").classList.remove("hidden");
+  $("final").textContent = `${order.length}問中 ${correct}問正解`;
+  $("finalNote").textContent = misses.length ? "間違えた問題:" : "全問正解です。";
+  $("missTable").innerHTML = misses.map(q =>
+    `<tr><td>${q.bank}</td><td>${q.ja}</td><td><span class="badge ${STANCE[q.stance].cls}">${STANCE[q.stance].label}</span></td></tr>`
+  ).join("");
+  $("retryMissBtn").classList.toggle("hidden", misses.length === 0);
+}
+
+$("form").addEventListener("submit", e => {
+  e.preventDefault();
+  if (answered) { next(); return; }
+  if (!$("input").value.trim()) return;
+  reveal(isCorrect($("input").value, order[idx]));
+});
+$("skipBtn").addEventListener("click", () => reveal(false));
+$("nextBtn").addEventListener("click", next);
+$("restartBtn").addEventListener("click", () => start(DATA));
+$("retryMissBtn").addEventListener("click", () => start(misses));
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter" && answered && document.activeElement !== $("nextBtn")) { e.preventDefault(); next(); }
+});
+
+start(DATA);
+</script>
+</body>
+</html>
